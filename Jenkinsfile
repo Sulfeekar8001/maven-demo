@@ -1,31 +1,42 @@
 pipeline {
     agent any
 
+    environment {
+        GITHUB_CREDS = credentials('github-packages-cred')
+        JAVA_HOME    = tool name: 'jdk11'
+        MAVEN_HOME   = tool name: 'maven3'
+        PATH         = "${JAVA_HOME}/bin:${PATH}"
+    }
+
     stages {
 
-        stage('Clone Code') {
+        stage('Checkout Code') {
             steps {
-                git 'https://github.com/username/repository.git'
+                checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build & Deploy') {
             steps {
-                echo "Building project..."
+                configFileProvider([configFile(fileId: 'maven-github-settings', variable: 'MAVEN_SETTINGS')]) {
+                    sh """
+                        export GH_USER=${GITHUB_CREDS_USR}
+                        export GH_TOKEN=${GITHUB_CREDS_PSW}
+
+                        ${MAVEN_HOME}/bin/mvn -s $MAVEN_SETTINGS -B clean package
+                        ${MAVEN_HOME}/bin/mvn -s $MAVEN_SETTINGS -B deploy
+                    """
+                }
             }
         }
+    }
 
-        stage('Test') {
-            steps {
-                echo "Testing project..."
-            }
+    post {
+        success {
+            echo "✅ Build and deployment to GitHub Packages completed successfully."
         }
-
-        stage('Deploy') {
-            steps {
-                echo "Deploying project..."
-            }
+        failure {
+            echo "❌ Pipeline failed. Check the console output for details."
         }
-
     }
 }
